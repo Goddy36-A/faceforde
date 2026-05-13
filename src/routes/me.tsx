@@ -35,11 +35,23 @@ function MePage() {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
-      const { data: emp } = await supabase
+      let { data: emp } = await supabase
         .from("employees")
         .select("id, full_name")
         .eq("user_id", user.id)
         .maybeSingle();
+      if (!emp && user.email) {
+        // Backfill: link by email
+        const { data: byEmail } = await supabase
+          .from("employees")
+          .select("id, full_name")
+          .eq("email", user.email)
+          .maybeSingle();
+        if (byEmail) {
+          await supabase.from("employees").update({ user_id: user.id }).eq("id", byEmail.id);
+          emp = byEmail;
+        }
+      }
       if (!emp) return;
       setEmpName(emp.full_name);
       const { data } = await supabase
