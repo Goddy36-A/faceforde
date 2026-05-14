@@ -4,9 +4,9 @@ import { AppLayout } from "@/components/app-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
-import { Loader2, ScanFace, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, ScanFace, AlertCircle, CheckCircle2, LogIn, LogOut } from "lucide-react";
 import { loadFaceApi, getDescriptorFromVideo, euclideanDistance } from "@/lib/face-api";
 import { todayDateString, classifyStatus, hoursBetween } from "@/lib/attendance";
 
@@ -45,6 +45,7 @@ function CheckinPage() {
   const [confirm, setConfirm] = useState<ConfirmCard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingModels, setLoadingModels] = useState(true);
+  const [mode, setMode] = useState<"in" | "out">("in");
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -101,7 +102,6 @@ function CheckinPage() {
       const today = todayDateString();
       const nowISO = new Date().toISOString();
 
-      // Find existing log for today
       const { data: existing } = await supabase
         .from("attendance_logs")
         .select("*")
@@ -109,7 +109,11 @@ function CheckinPage() {
         .eq("date", today)
         .maybeSingle();
 
-      if (!existing) {
+      if (mode === "in") {
+        if (existing) {
+          setError(`${emp.full_name} already checked in today at ${new Date(existing.check_in_time!).toLocaleTimeString()}.`);
+          return;
+        }
         const status = classifyStatus(nowISO);
         const { error: insErr } = await supabase.from("attendance_logs").insert({
           employee_id: emp.id,
@@ -126,7 +130,15 @@ function CheckinPage() {
           status,
           action: "checked-in",
         });
-      } else if (!existing.check_out_time) {
+      } else {
+        if (!existing) {
+          setError(`${emp.full_name} has not checked in yet today.`);
+          return;
+        }
+        if (existing.check_out_time) {
+          setError(`${emp.full_name} already checked out at ${new Date(existing.check_out_time).toLocaleTimeString()}.`);
+          return;
+        }
         const hours = existing.check_in_time ? hoursBetween(existing.check_in_time, nowISO) : 0;
         const { error: updErr } = await supabase
           .from("attendance_logs")
@@ -141,8 +153,6 @@ function CheckinPage() {
           status: existing.status,
           action: "checked-out",
         });
-      } else {
-        setError(`${emp.full_name} has already checked in and out today.`);
       }
     } catch (e: any) {
       setError(e.message ?? "Failed to process");
@@ -154,66 +164,76 @@ function CheckinPage() {
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div>
-        <h1 className="text-2xl font-semibold">Face Check-in</h1>
-        <p className="text-sm text-muted-foreground">Look at the camera and tap scan to record your attendance.</p>
+        <h1 className="text-2xl font-semibold">Face Attendance</h1>
+        <p className="text-sm text-muted-foreground">Switch between Check-In and Check-Out, then scan your face.</p>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ScanFace className="h-5 w-5 text-primary" /> Live camera</CardTitle>
-            <CardDescription>{loadingModels ? "Loading face models…" : ready ? `${employees.length} enrolled employees` : "Initializing camera"}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="aspect-video rounded-md overflow-hidden bg-black ring-1 ring-border relative">
-              <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
-              {(!ready || loadingModels) && (
-                <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground bg-black/40">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                </div>
-              )}
-            </div>
-            <Button onClick={handleScan} disabled={!ready || scanning} className="w-full">
-              {scanning && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Scan & Check {confirm?.action === "checked-in" ? "Out" : "In"}
-            </Button>
-          </CardContent>
-        </Card>
+      <Tabs value={mode} onValueChange={(v) => { setMode(v as "in" | "out"); setError(null); setConfirm(null); }}>
+        <TabsList className="grid grid-cols-2 w-full max-w-sm">
+          <TabsTrigger value="in" className="gap-2"><LogIn className="h-4 w-4" /> Check-In</TabsTrigger>
+          <TabsTrigger value="out" className="gap-2"><LogOut className="h-4 w-4" /> Check-Out</TabsTrigger>
+        </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Result</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {error && (
-              <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive">
-                <AlertCircle className="h-4 w-4 mt-0.5" />
-                <span>{error}</span>
-              </div>
-            )}
-            {confirm && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-14 w-14">
-                    <AvatarImage src={confirm.photo_url ?? undefined} />
-                    <AvatarFallback>{confirm.name.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-base font-semibold">{confirm.name}</p>
-                    <p className="text-xs text-muted-foreground">{confirm.department}</p>
+        <TabsContent value={mode} forceMount>
+          <div className="grid md:grid-cols-2 gap-4 mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><ScanFace className="h-5 w-5 text-primary" /> Live camera</CardTitle>
+                <CardDescription>{loadingModels ? "Loading face models…" : ready ? `${employees.length} enrolled employees` : "Initializing camera"}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="aspect-video rounded-md overflow-hidden bg-black ring-1 ring-border relative">
+                  <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
+                  {(!ready || loadingModels) && (
+                    <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground bg-black/40">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    </div>
+                  )}
+                </div>
+                <Button onClick={handleScan} disabled={!ready || scanning} className="w-full">
+                  {scanning && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Scan & {mode === "in" ? "Check-In" : "Check-Out"}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Result</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {error && (
+                  <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4 mt-0.5" />
+                    <span>{error}</span>
                   </div>
-                </div>
-                <div className="rounded-md bg-success/10 border border-success/30 p-3 flex items-center gap-2 text-sm text-success">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>Successfully {confirm.action} at {confirm.time} ({confirm.status})</span>
-                </div>
-              </div>
-            )}
-            {!error && !confirm && (
-              <p className="text-sm text-muted-foreground">No scan yet. Hit the button to begin.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                )}
+                {confirm && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-14 w-14">
+                        <AvatarImage src={confirm.photo_url ?? undefined} />
+                        <AvatarFallback>{confirm.name.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-base font-semibold">{confirm.name}</p>
+                        <p className="text-xs text-muted-foreground">{confirm.department}</p>
+                      </div>
+                    </div>
+                    <div className="rounded-md bg-success/10 border border-success/30 p-3 flex items-center gap-2 text-sm text-success">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Successfully {confirm.action} at {confirm.time} ({confirm.status})</span>
+                    </div>
+                  </div>
+                )}
+                {!error && !confirm && (
+                  <p className="text-sm text-muted-foreground">No scan yet. Hit the button to begin.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
