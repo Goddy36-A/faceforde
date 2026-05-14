@@ -69,9 +69,8 @@ function ReportsPage() {
         r.hours += Number(l.hours_worked ?? 0);
       });
       const final = Array.from(byEmp.values()).map((r) => {
-        const attended = r.present + r.late;
-        r.absent = Math.max(0, totalDays - attended);
-        r.rate = totalDays > 0 ? Math.round((attended / totalDays) * 1000) / 10 : 0;
+        r.absent = Math.max(0, totalDays - r.present);
+        r.rate = totalDays > 0 ? Math.round((r.present / totalDays) * 1000) / 10 : 0;
         r.hours = Math.round(r.hours * 100) / 100;
         return r;
       });
