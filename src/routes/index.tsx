@@ -44,9 +44,9 @@ function DashboardPage() {
         .eq("date", today)
         .order("check_in_time", { ascending: false });
       const total = emps?.length ?? 0;
-      const present = logs?.filter((l) => l.status === "present").length ?? 0;
-      const late = logs?.filter((l) => l.status === "late").length ?? 0;
       const checkedInIds = new Set(logs?.map((l) => l.employee_id) ?? []);
+      const present = checkedInIds.size; // anyone who checked in counts as present
+      const late = logs?.filter((l) => l.status === "late").length ?? 0;
       const absent = (emps ?? []).filter((e) => !checkedInIds.has(e.id)).length;
       setStats({ total, present, late, absent });
       setFeed(
