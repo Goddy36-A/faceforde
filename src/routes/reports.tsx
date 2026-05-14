@@ -63,8 +63,9 @@ function ReportsPage() {
       (logs ?? []).forEach((l) => {
         const r = byEmp.get(l.employee_id);
         if (!r) return;
-        if (l.status === "present") r.present++;
-        else if (l.status === "late") r.late++;
+        // Anyone who checked in counts as present; late is a subset shown separately
+        r.present++;
+        if (l.status === "late") r.late++;
         r.hours += Number(l.hours_worked ?? 0);
       });
       const final = Array.from(byEmp.values()).map((r) => {
