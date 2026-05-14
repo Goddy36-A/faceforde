@@ -63,14 +63,14 @@ function ReportsPage() {
       (logs ?? []).forEach((l) => {
         const r = byEmp.get(l.employee_id);
         if (!r) return;
-        if (l.status === "present") r.present++;
-        else if (l.status === "late") r.late++;
+        // Anyone who checked in counts as present; late is a subset shown separately
+        r.present++;
+        if (l.status === "late") r.late++;
         r.hours += Number(l.hours_worked ?? 0);
       });
       const final = Array.from(byEmp.values()).map((r) => {
-        const attended = r.present + r.late;
-        r.absent = Math.max(0, totalDays - attended);
-        r.rate = totalDays > 0 ? Math.round((attended / totalDays) * 1000) / 10 : 0;
+        r.absent = Math.max(0, totalDays - r.present);
+        r.rate = totalDays > 0 ? Math.round((r.present / totalDays) * 1000) / 10 : 0;
         r.hours = Math.round(r.hours * 100) / 100;
         return r;
       });
